@@ -15,15 +15,18 @@ root.resizable(False,False)
 
 #全局参数
 bPNG = BooleanVar()
-sZOOM = StringVar()
-sZOOM.set("A")
+sJPG = StringVar()
+sJPG.set("WEBP")
+dict_JPG = dict()
+dict_JPG['JPG'] = ['JPEG','.jpg']
+dict_JPG['WEBP'] = ['WEBP','.webp']
 bZOOM_01 = BooleanVar()
 bZOOM_02 = BooleanVar()
 bZOOM_03 = BooleanVar()
 sZOOM_11 = StringVar(value="33177600")
 sZOOM_12 = StringVar(value="0.25")
 sZOOM_21 = StringVar(value="12441600")
-sZOOM_22 = StringVar(value="0.3")
+sZOOM_22 = StringVar(value="0.333333")
 sZOOM_31 = StringVar(value="8294400")
 sZOOM_32 = StringVar(value="0.5")
 sDrop = StringVar(value="拖放文件到此处")
@@ -31,6 +34,7 @@ sPath = ""
 sTemp = ""
 sTempAfter = ""
 sTempZIP = ""
+sQuality = StringVar(value="75")
 
 #删除临时文件
 def move_to_trash(file_path):
@@ -150,7 +154,7 @@ def pack_folder_except_tmp(source_folder,output_folder, output_zip, exclude_file
 
 
 #压缩图片
-def fcompress_images(input_folder, output_folder, quality=75):
+def fcompress_images(input_folder, output_folder, quality):
     """
     压缩指定文件夹中的图片文件为指定质量的JPEG格式
     
@@ -185,8 +189,8 @@ def fcompress_images(input_folder, output_folder, quality=75):
                 relative_path = os.path.relpath(input_path, input_folder)
                 output_path = os.path.join(output_folder, relative_path)
                 
-                # 更改输出文件扩展名为.jpg
-                output_path = Path(output_path).with_suffix('.jpg')
+                # 更改输出文件扩展名
+                output_path = Path(output_path).with_suffix(dict_JPG[sJPG.get()][1])
                 
                 # 创建输出文件的目录结构
                 output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -205,8 +209,23 @@ def fcompress_images(input_folder, output_folder, quality=75):
                         elif img.mode != 'RGB':
                             img = img.convert('RGB')
                         
-                        # 保存为JPEG格式
-                        img.save(output_path, 'JPEG', quality=quality, optimize=True)
+                        #处理缩放大小
+                        width, height = img.size
+                        iZoom = 1
+                        if bZOOM_01.get() and ((width * height)>int(sZOOM_11.get())):
+                            iZoom = float(sZOOM_12.get())
+                        elif bZOOM_02.get() and ((width * height)>int(sZOOM_21.get())):
+                            iZoom = float(sZOOM_22.get())
+                        elif bZOOM_03.get() and ((width * height)>int(sZOOM_31.get())):
+                            iZoom = float(sZOOM_32.get())
+                            
+                        new_width = int(width * iZoom)
+                        new_height = int(height * iZoom)
+                        
+                        resized_img = img.resize((new_width, new_height), Image.LANCZOS)
+                        
+                        # 保存为指定格式
+                        resized_img.save(output_path, dict_JPG[sJPG.get()][0], quality=quality, optimize=True)
                         print(f"✓ 已处理: {file} -> {output_path.name}")
                         processed_count += 1
                         
@@ -222,11 +241,37 @@ def fcompress_images(input_folder, output_folder, quality=75):
     print(f"成功处理: {processed_count} 个文件")
     print(f"处理失败: {error_count} 个文件")
 
+def my_own_makedirs(filePath):
+    '''
+    递归创建文件夹，filePath从根目录开始判断，如果有那一层路径不存在就创建
+    例如filePath为D:/报告/123.zip，那么程序会首先判断D:/是否存在，如果不存在则会创建；
+    接下来会判断 D:/报告 是否存在，如果不存在则会创建；
+    这个函数只会创建文件夹，而不会创建文件。
+    :param filePath: 文件的路径，注意不是文件夹的路径，例如：D:/123.zip，字符串格式
+    :return: None
+    '''
+    # print(filePath)
+    filePath=filePath.replace("/","\\")
+    folderList=filePath.split("\\")[0:-1]
+    # print(folderList)
+    currenPath=folderList[0]+"\\"
+    for i in range(0,len(folderList)):
+        currenPath = os.path.join(currenPath, folderList[i])
+        # print(currenPath)
+        if os.path.isdir(currenPath):
+            # print("存在")
+            pass
+        else:
+            print(currenPath+"不存在,开始创建")
+            os.mkdir(currenPath)
+
 
 #解压ZIP临时文件夹
 def fExtractZIP(zip_path, extract_to):
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(extract_to)
+
+# 使用示例        
         print(f"文件已解压到: {extract_to}")
         
         
@@ -251,8 +296,8 @@ def fStartCompress():
         pass  # 创建空文件    
         
     fExtractZIP(sDrop.get(),sTemp)
-    
-    fcompress_images(sTemp,sTempAfter,75)
+
+    fcompress_images(sTemp,sTempAfter,sQuality.get())
     
     pack_folder_except_tmp(sTempAfter,sTempZIP,os.path.basename(sDrop.get()))
     #print(sPath,bPNG.get())
@@ -261,8 +306,11 @@ def fStartCompress():
 
 btnStart = Button(root,text="开始压缩",command=fStartCompress).pack(anchor="nw",padx=20,pady=20)
 
-#选项是否PNG压缩成JPG
-Checkbutton(root,text="将PNG压缩成JPG",variable=bPNG).pack(anchor="nw",padx=20,pady=10)
+#选择压缩选项
+#Checkbutton(root,text="将PNG压缩成JPG",variable=bPNG).pack(anchor="nw",padx=20,pady=10)
+
+Radiobutton(root,text="压缩成WEBP",variable=sJPG,value="WEBP").pack(anchor="nw",padx=20,pady=1)
+Radiobutton(root,text="压缩成JPG",variable=sJPG,value="JPG").pack(anchor="nw",padx=20,pady=1)
 
 #文件拖放部分
 
@@ -282,10 +330,6 @@ lblDrop.dnd_bind('<<Drop>>', on_drop)
 
 
 #长宽压缩选项
-Radiobutton(root,text="不压缩大小",variable=sZOOM,value="A").pack(anchor="nw",padx=20,pady=1)
-Radiobutton(root,text="压缩一半",variable=sZOOM,value="B").pack(anchor="nw",padx=20,pady=1)
-Radiobutton(root,text="压缩1/3",variable=sZOOM,value="C").pack(anchor="nw",padx=20,pady=1)
-Radiobutton(root,text="自适应算法:（从上往下Else，不勾或者不满足则不压缩）",variable=sZOOM,value="D").pack(anchor="nw",padx=20,pady=1)
 
 frame_01 = Frame(root)
 frame_01.pack(anchor="nw",padx=30,pady=1)
@@ -295,6 +339,9 @@ frame_02.pack(anchor="nw",padx=30,pady=1)
 
 frame_03 = Frame(root)
 frame_03.pack(anchor="nw",padx=30,pady=1)
+
+frame_04 = Frame(root)
+frame_04.pack(anchor="nw",padx=30,pady=1)
 
 Checkbutton(frame_01,text="  当 宽 x 高 >  ",variable=bZOOM_01).pack(side="left",padx=1,pady=1)
 Entry(frame_01,textvariable=sZOOM_11).pack(side="left",padx=1,pady=1)
@@ -310,6 +357,9 @@ Checkbutton(frame_03,text="  当 宽 x 高 >  ",variable=bZOOM_03).pack(side="le
 Entry(frame_03,textvariable=sZOOM_31).pack(side="left",padx=1,pady=1)
 Label(frame_03,text="时，缩放比例").pack(side="left",padx=1,pady=1)
 Entry(frame_03,textvariable=sZOOM_32).pack(side="left",padx=1,pady=1)
+
+Label(frame_04,text="质量参数：0到100 ").pack(side="left",padx=1,pady=1)
+Entry(frame_04,textvariable=sQuality).pack(side="left",padx=1,pady=1)
 
 #Radiobutton(root,text="当宽>3840时",variable=sZOOM,value="F").pack(anchor="nw",padx=30,pady=1)
 #Radiobutton(root,text="当高>3840时",variable=sZOOM,value="G").pack(anchor="nw",padx=30,pady=1)
